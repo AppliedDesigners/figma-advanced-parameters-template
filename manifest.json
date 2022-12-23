@@ -1,0 +1,22 @@
+{
+  "name": "ParametersTemplate",
+  "id": "1188035056898420648",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "src/ui.html",
+  "editorType": ["figma", "figjam"],
+  "menu": [
+    {
+      "name": "Questions",
+      "command": "questions",
+      "parameters": [
+        {
+          "name": "Number",
+          "key": "number",
+          "allowFreeform": false,
+          "optional": false
+        }
+      ]
+    }
+  ]
+}

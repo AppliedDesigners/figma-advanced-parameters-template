@@ -1,0 +1,24 @@
+<script>
+  console.log('*** UI Loaded ***')
+  window.onmessage = async (event) => {
+    const message = event.data.pluginMessage
+    const type = message.type
+    const url = message.url
+    console.log("Run command %s with params: %s", type, url)
+    
+    try {
+      const response = await fetch(url)
+      const data = await response.json()
+      postMessage(data, type)
+    } catch (error) {
+      postMessage({ message: error.message }, 'error')
+    }
+  };
+  
+  function postMessage(response, type) {
+    window.parent.postMessage({
+      pluginMessage: { response, type }
+    }, "*");
+  }
+</script>
+
