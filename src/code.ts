@@ -44,7 +44,7 @@ async function startUI() {
   // - https://www.figma.com/plugin-docs/api/properties/figma-ui-onmessage/#signature
   figma.ui.onmessage = async (msg) => {
     if (msg.type === ERROR) {
-      figma.notify(msg.message, {error: true})
+      figma.notify(msg.message, { error: true })
     } else if (msg.type === COMMANDS.QUESTIONS) {
       const questions = msg.response
       await figma.loadFontAsync(DEFAULT_FONT_CONFIG);
