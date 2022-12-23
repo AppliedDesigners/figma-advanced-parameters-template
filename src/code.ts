@@ -51,7 +51,8 @@ async function startUI() {
 
       const frame = figma.createFrame()
 
-      // Create a text node for each question and set TextNode characters to be the question value
+      // Create a text node for each question
+      // set each TextNode characters attribute to be the question string value
       for (let index = 0; index < questions.length; index++) {
         const { question } = questions[index];
 
