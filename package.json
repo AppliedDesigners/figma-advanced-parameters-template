@@ -1,5 +1,5 @@
 {
-  "name": "AdvancedParametersTemplate",
+  "name": "advanced-parameters",
   "version": "1.0.0",
   "description": "Template plugin for advanced Figma parameters",
   "main": "code.js",
