@@ -1,5 +1,5 @@
 import * as chai from "chai";
-import { utilExample, breakdown } from "@/utils";
+import { utilExample, usageBreakdown } from "@/utils";
 const { assert } = chai;
 
 describe("src/utils", () => {
@@ -10,9 +10,9 @@ describe("src/utils", () => {
     });
   });
 
-  describe.only("breakdown", () => {
+  describe.only("usageBreakdown", () => {
     it("example test", () => {
-      const result = breakdown({
+      const result = usageBreakdown({
         usage: [
           {
             apiKeyId: "apiKey1",

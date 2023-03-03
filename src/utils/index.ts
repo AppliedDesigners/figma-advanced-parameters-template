@@ -81,8 +81,33 @@ const formatAmounts = (obj: any) => {
   return obj;
 };
 
-export const breakdown = ({ usage }: { usage: TokenUsageSummary[] }) => {
-  const result = usage.reduce(
+const applyRates = ({ usage, rates, data }) => {
+  usage.forEach(({ apiKeyId: id, model, provider }) => {
+    const modelRate = rates?.[provider]?.[model];
+    const modelTokens = data?.[id]?.[model]?.tokens;
+
+    if (!modelRate || !modelTokens) {
+      console.warn(`No rate for provider:${provider} model:${model}`);
+      return;
+    }
+
+    const {
+      transform_quantity: { divide_by },
+      unit_amount_decimal: unitRate
+    } = modelRate;
+    const unitCount = modelTokens / divide_by;
+    const amount = parseFloat(unitRate) * unitCount;
+
+    console.log(`\n${model} (${unitCount} * ${unitRate}) amount:`, amount);
+
+    data.all.amount += amount;
+    data[id].all.amount += amount;
+    data[id][model].amount += amount;
+  });
+};
+
+const prepareBreakdown = (usage) =>
+  usage.reduce(
     (memo, summary: TokenUsageSummary) => {
       const { countTotal, tokenTotal, apiKeyId: id, model } = summary;
       if (!memo[id]) {
@@ -121,27 +146,16 @@ export const breakdown = ({ usage }: { usage: TokenUsageSummary[] }) => {
     }
   );
 
-  for (let index = 0; index < usage.length; index++) {
-    const summary = usage[index];
-    const { apiKeyId: id, model, provider } = summary;
-    const modelRate = RATE_TABLE[provider][model];
-    if (modelRate) {
-      const modelTokens = result[id][model].tokens;
-      const unitCount = modelTokens / modelRate.transform_quantity.divide_by;
-      const unitRate = parseFloat(modelRate.unit_amount_decimal);
+export const usageBreakdown = ({
+  usage,
+  rates = RATE_TABLE
+}: {
+  usage: TokenUsageSummary[];
+  rates?: any;
+}) => {
+  const data = prepareBreakdown(usage);
+  applyRates({ usage, rates, data });
+  formatAmounts(data);
 
-      const amount = unitCount * unitRate;
-      console.log(`\n${model} (${unitCount} * ${unitRate}) amount:`, amount);
-
-      result.all.amount += amount;
-      result[id].all.amount += amount;
-      result[id][model].amount += amount;
-    } else {
-      console.warn(`No rate for provider:${provider} model:${model}`);
-    }
-  }
-
-  formatAmounts(result);
-
-  return result;
+  return data;
 };
