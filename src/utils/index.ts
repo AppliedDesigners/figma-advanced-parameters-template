@@ -68,11 +68,13 @@ const formatAmounts = (obj: any) => {
     if (val && typeof val === "object") {
       formatAmounts(val);
 
-      if ("amountTotal" in val) {
-        obj[key].formattedAmountTotal = new Intl.NumberFormat("en", {
-          style: "currency",
-          currency: "usd"
-        }).format(val.amountTotal / 100);
+      if ("amount" in val) {
+        if (val.amount) {
+          obj[key].formattedAmount = new Intl.NumberFormat("en", {
+            style: "currency",
+            currency: "usd"
+          }).format(val.amount / 100);
+        }
       }
     }
   });
@@ -82,38 +84,39 @@ const formatAmounts = (obj: any) => {
 export const breakdown = ({ usage }: { usage: TokenUsageSummary[] }) => {
   const result = usage.reduce(
     (memo, summary: TokenUsageSummary) => {
-      const { countTotal, tokenTotal, apiKeyId: id, model, provider } = summary;
+      const { countTotal, tokenTotal, apiKeyId: id, model } = summary;
       if (!memo[id]) {
         memo[id] = {
           all: {
-            countTotal: 0,
-            tokenTotal: 0,
-            amountTotal: 0
+            count: 0,
+            tokens: 0,
+            amount: 0
           }
         };
       }
       if (!memo[id][model]) {
         memo[id][model] = {
-          countTotal: 0,
-          tokenTotal: 0,
-          amountTotal: 0
+          count: 0,
+          tokens: 0,
+          amount: 0
         };
       }
-      memo.all.countTotal += countTotal;
-      memo[id].all.countTotal += countTotal;
-      memo[id][model].countTotal += countTotal;
+      memo.all.count += countTotal;
+      memo[id].all.count += countTotal;
+      memo[id][model].count += countTotal;
 
-      memo.all.tokenTotal += tokenTotal;
-      memo[id].all.tokenTotal += tokenTotal;
-      memo[id][model].tokenTotal += tokenTotal;
+      memo.all.tokens += tokenTotal;
+      memo[id].all.tokens += tokenTotal;
+      memo[id][model].tokens += tokenTotal;
 
       return memo;
     },
     {
       all: {
-        countTotal: 0,
-        tokenTotal: 0,
-        amountTotal: 0
+        count: 0,
+        tokens: 0,
+        amount: 0,
+        formattedAmount: "$0.00"
       }
     }
   );
@@ -123,16 +126,16 @@ export const breakdown = ({ usage }: { usage: TokenUsageSummary[] }) => {
     const { apiKeyId: id, model, provider } = summary;
     const modelRate = RATE_TABLE[provider][model];
     if (modelRate) {
-      const modelTokens = result[id][model].tokenTotal;
+      const modelTokens = result[id][model].tokens;
       const unitCount = modelTokens / modelRate.transform_quantity.divide_by;
       const unitRate = parseFloat(modelRate.unit_amount_decimal);
 
       const amount = unitCount * unitRate;
       console.log(`\n${model} (${unitCount} * ${unitRate}) amount:`, amount);
 
-      result.all.amountTotal += amount;
-      result[id].all.amountTotal += amount;
-      result[id][model].amountTotal += amount;
+      result.all.amount += amount;
+      result[id].all.amount += amount;
+      result[id][model].amount += amount;
     } else {
       console.warn(`No rate for provider:${provider} model:${model}`);
     }
@@ -142,50 +145,3 @@ export const breakdown = ({ usage }: { usage: TokenUsageSummary[] }) => {
 
   return result;
 };
-
-// export const breakdown = ({ usage }: { usage: TokenUsageSummary[] }) => {
-//   const result = usage.reduce(
-//     (memo, summary) => {
-//       if (!memo[summary.apiKeyId]) {
-//         memo[summary.apiKeyId] = {
-//           all: {
-//             count: 0
-//           }
-//         };
-//       }
-
-//       return memo;
-//     },
-//     {
-//       all: {
-//         count: 0
-//       }
-//     } as {
-//       [key: string]:
-//         | {
-//             count: number;
-//           }
-//         | {
-//             [key: string]:
-//               | number
-//               | {
-//                   [key: string]: {
-//                     count: number;
-//                   };
-//                 };
-//             count: number;
-//           };
-//       all: {
-//         [key: string]:
-//           | number
-//           | {
-//               [key: string]: {
-//                 count: number;
-//               };
-//             };
-//         count: number;
-//       };
-//     }
-//   );
-//   return result;
-// };

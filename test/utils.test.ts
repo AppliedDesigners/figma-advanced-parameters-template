@@ -65,49 +65,49 @@ describe("src/utils", () => {
 
       const target = {
         all: {
-          countTotal: 10,
-          tokenTotal: 500000,
-          amountTotal: 550,
-          formattedAmountTotal: "$5.50"
+          count: 10,
+          tokens: 500000,
+          amount: 550,
+          formattedAmount: "$5.50"
         },
         apiKey1: {
           "all": {
-            countTotal: 6,
-            tokenTotal: 300000,
-            amountTotal: 240,
-            formattedAmountTotal: "$2.40"
+            count: 6,
+            tokens: 300000,
+            amount: 240,
+            formattedAmount: "$2.40"
           },
           "text-davinci-003": {
-            countTotal: 2,
-            tokenTotal: 100000,
-            amountTotal: 200,
-            formattedAmountTotal: "$2.00"
+            count: 2,
+            tokens: 100000,
+            amount: 200,
+            formattedAmount: "$2.00"
           },
           "text-curie-001": {
-            countTotal: 4,
-            tokenTotal: 200000,
-            amountTotal: 40,
-            formattedAmountTotal: "$0.40"
+            count: 4,
+            tokens: 200000,
+            amount: 40,
+            formattedAmount: "$0.40"
           }
         },
         apiKey2: {
           "all": {
-            countTotal: 4,
-            tokenTotal: 200000,
-            amountTotal: 310,
-            formattedAmountTotal: "$3.10"
+            count: 4,
+            tokens: 200000,
+            amount: 310,
+            formattedAmount: "$3.10"
           },
           "text-davinci-003": {
-            countTotal: 3,
-            tokenTotal: 150000,
-            amountTotal: 300,
-            formattedAmountTotal: "$3.00"
+            count: 3,
+            tokens: 150000,
+            amount: 300,
+            formattedAmount: "$3.00"
           },
           "text-curie-001": {
-            countTotal: 1,
-            tokenTotal: 50000,
-            amountTotal: 10,
-            formattedAmountTotal: "$0.10"
+            count: 1,
+            tokens: 50000,
+            amount: 10,
+            formattedAmount: "$0.10"
           }
         }
       };
