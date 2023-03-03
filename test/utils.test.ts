@@ -61,46 +61,53 @@ describe("src/utils", () => {
         ]
       });
 
-      // console.log(`---- result`, JSON.stringify(result, null, 2));
+      console.log(`---- result`, JSON.stringify(result, null, 2));
 
       const target = {
         all: {
-          countTotal: 6 + 4,
-          tokenTotal: 300000 + 200000,
-          amountTotal: 240 + 310
+          countTotal: 10,
+          tokenTotal: 500000,
+          amountTotal: 550,
+          formattedAmountTotal: "$5.50"
         },
         apiKey1: {
           "all": {
             countTotal: 6,
             tokenTotal: 300000,
-            amountTotal: 240
+            amountTotal: 240,
+            formattedAmountTotal: "$2.40"
           },
           "text-davinci-003": {
             countTotal: 2,
             tokenTotal: 100000,
-            amountTotal: 200
+            amountTotal: 200,
+            formattedAmountTotal: "$2.00"
           },
           "text-curie-001": {
             countTotal: 4,
             tokenTotal: 200000,
-            amountTotal: 40
+            amountTotal: 40,
+            formattedAmountTotal: "$0.40"
           }
         },
         apiKey2: {
           "all": {
             countTotal: 4,
             tokenTotal: 200000,
-            amountTotal: 310
+            amountTotal: 310,
+            formattedAmountTotal: "$3.10"
           },
           "text-davinci-003": {
             countTotal: 3,
             tokenTotal: 150000,
-            amountTotal: 300
+            amountTotal: 300,
+            formattedAmountTotal: "$3.00"
           },
           "text-curie-001": {
             countTotal: 1,
             tokenTotal: 50000,
-            amountTotal: 10
+            amountTotal: 10,
+            formattedAmountTotal: "$0.10"
           }
         }
       };

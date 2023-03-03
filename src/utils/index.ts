@@ -62,6 +62,23 @@ const RATE_TABLE = {
   published: "2023-03-03T22:42:43.604Z"
 };
 
+const formatAmounts = (obj: any) => {
+  Object.keys(obj).forEach((key) => {
+    const val = obj[key];
+    if (val && typeof val === "object") {
+      formatAmounts(val);
+
+      if ("amountTotal" in val) {
+        obj[key].formattedAmountTotal = new Intl.NumberFormat("en", {
+          style: "currency",
+          currency: "usd"
+        }).format(val.amountTotal / 100);
+      }
+    }
+  });
+  return obj;
+};
+
 export const breakdown = ({ usage }: { usage: TokenUsageSummary[] }) => {
   const result = usage.reduce(
     (memo, summary: TokenUsageSummary) => {
@@ -111,11 +128,7 @@ export const breakdown = ({ usage }: { usage: TokenUsageSummary[] }) => {
       const unitRate = parseFloat(modelRate.unit_amount_decimal);
 
       const amount = unitCount * unitRate;
-      console.log(
-        `------- ${model} (${unitCount} * ${unitRate}) amount:`,
-        amount
-      );
-      console.log("\n");
+      console.log(`\n${model} (${unitCount} * ${unitRate}) amount:`, amount);
 
       result.all.amountTotal += amount;
       result[id].all.amountTotal += amount;
@@ -124,6 +137,8 @@ export const breakdown = ({ usage }: { usage: TokenUsageSummary[] }) => {
       console.warn(`No rate for provider:${provider} model:${model}`);
     }
   }
+
+  formatAmounts(result);
 
   return result;
 };
