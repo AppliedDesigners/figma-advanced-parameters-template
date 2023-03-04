@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as chai from "chai";
 import { utilExample, usageBreakdown } from "@/utils";
 const { assert } = chai;
@@ -111,6 +112,8 @@ describe("src/utils", () => {
           }
         }
       };
+
+      // @ts-ignore
       assert.deepEqual(result, target);
     });
   });

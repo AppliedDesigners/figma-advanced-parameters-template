@@ -13,7 +13,50 @@ export interface TokenUsageSummary {
   tokenMonthlyAvg: number;
 }
 
-const RATE_TABLE = {
+interface BreakdownItem {
+  count: number;
+  tokens: number;
+  amount: number;
+  formattedAmount: string;
+}
+
+interface Breakdown {
+  [key: string]:
+    | {
+        [key: string]: BreakdownItem;
+        all: BreakdownItem;
+      }
+    | BreakdownItem;
+  all: BreakdownItem;
+}
+
+interface TransformQuantity {
+  divide_by: number;
+  round: "up" | "down";
+}
+
+interface OpenAI {
+  [model: string]:
+    | {
+        transform_quantity: TransformQuantity;
+        unit_amount_decimal: string;
+      }
+    | {
+        [model: string]: {
+          transform_quantity: TransformQuantity;
+          unit_amount_decimal: string;
+        };
+      };
+}
+
+interface Pricing {
+  [key: string]: string | OpenAI;
+  id: string;
+  openai: OpenAI;
+  published: string;
+}
+
+const PRICING: Pricing = {
   id: "3b41a695-3c09-49db-8d03-e37673c260f0",
   openai: {
     "text-davinci-003": {
@@ -81,12 +124,20 @@ const formatAmounts = (obj: any) => {
   return obj;
 };
 
-const applyRates = ({ usage, rates, data }) => {
+const applyPricing = ({
+  usage,
+  pricing,
+  data
+}: {
+  usage: TokenUsageSummary[];
+  pricing: Pricing;
+  data: Breakdown;
+}) => {
   usage.forEach(({ apiKeyId: id, model, provider }) => {
-    const modelRate = rates?.[provider]?.[model];
+    const rate = pricing?.[provider]?.[model];
     const modelTokens = data?.[id]?.[model]?.tokens;
 
-    if (!modelRate || !modelTokens) {
+    if (!rate || !modelTokens) {
       console.warn(`No rate for provider:${provider} model:${model}`);
       return;
     }
@@ -94,7 +145,7 @@ const applyRates = ({ usage, rates, data }) => {
     const {
       transform_quantity: { divide_by },
       unit_amount_decimal: unitRate
-    } = modelRate;
+    } = rate;
     const unitCount = modelTokens / divide_by;
     const amount = parseFloat(unitRate) * unitCount;
 
@@ -106,33 +157,23 @@ const applyRates = ({ usage, rates, data }) => {
   });
 };
 
-const prepareBreakdown = (usage) =>
-  usage.reduce(
-    (memo, summary: TokenUsageSummary) => {
-      const { countTotal, tokenTotal, apiKeyId: id, model } = summary;
-      if (!memo[id]) {
-        memo[id] = {
-          all: {
-            count: 0,
-            tokens: 0,
-            amount: 0
-          }
-        };
-      }
-      if (!memo[id][model]) {
-        memo[id][model] = {
-          count: 0,
-          tokens: 0,
-          amount: 0
-        };
-      }
-      memo.all.count += countTotal;
-      memo[id].all.count += countTotal;
-      memo[id][model].count += countTotal;
+const prepareBreakdown = (usage: TokenUsageSummary[]) => {
+  const result = usage.reduce(
+    (memo, { apiKeyId: id, model, countTotal, tokenTotal }) => {
+      memo[id] ??= { all: { count: 0, tokens: 0, amount: 0 } };
+      memo[id][model] ??= { count: 0, tokens: 0, amount: 0 };
 
+      memo.all.count += countTotal;
       memo.all.tokens += tokenTotal;
+      memo.all.amount += 0;
+
+      memo[id].all.count += countTotal;
       memo[id].all.tokens += tokenTotal;
+      memo[id].all.amount += 0;
+
+      memo[id][model].count += countTotal;
       memo[id][model].tokens += tokenTotal;
+      memo[id][model].amount += 0;
 
       return memo;
     },
@@ -143,18 +184,29 @@ const prepareBreakdown = (usage) =>
         amount: 0,
         formattedAmount: "$0.00"
       }
-    }
+    } as any
   );
+
+  return result as {
+    [key: string]:
+      | {
+          [key: string]: BreakdownItem;
+          all: BreakdownItem;
+        }
+      | BreakdownItem;
+    all: BreakdownItem;
+  };
+};
 
 export const usageBreakdown = ({
   usage,
-  rates = RATE_TABLE
+  pricing = PRICING
 }: {
   usage: TokenUsageSummary[];
-  rates?: any;
+  pricing?: any;
 }) => {
   const data = prepareBreakdown(usage);
-  applyRates({ usage, rates, data });
+  applyPricing({ usage, pricing, data });
   formatAmounts(data);
 
   return data;
