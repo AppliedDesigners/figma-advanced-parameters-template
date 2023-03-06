@@ -62,17 +62,34 @@ describe("src/utils", () => {
         ]
       });
 
-      console.log(`---- result`, JSON.stringify(result, null, 2));
-
       const target = {
-        all: {
+        summary: {
           count: 10,
           tokens: 500000,
           amount: 550,
           formattedAmount: "$5.50"
         },
+        models: {
+          "text-curie-001": {
+            count: 5,
+            tokens: 250000,
+            amount: 50,
+            formattedAmount: "$0.50"
+          },
+          "text-davinci-003": {
+            count: 5,
+            tokens: 250000,
+            amount: 500,
+            formattedAmount: "$5.00"
+          }
+        },
+        options: {
+          ids: ["apiKey1", "apiKey2"],
+          models: ["text-davinci-003", "text-curie-001"],
+          providers: ["openai"]
+        },
         apiKey1: {
-          "all": {
+          "summary": {
             count: 6,
             tokens: 300000,
             amount: 240,
@@ -92,7 +109,7 @@ describe("src/utils", () => {
           }
         },
         apiKey2: {
-          "all": {
+          "summary": {
             count: 4,
             tokens: 200000,
             amount: 310,

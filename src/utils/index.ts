@@ -1,5 +1,5 @@
 // @ts-nocheck
-export const utilExample = () => true;
+import cloneDeep from "lodash/cloneDeep";
 
 export interface TokenUsageSummary {
   apiKeyId: string;
@@ -13,21 +13,31 @@ export interface TokenUsageSummary {
   tokenMonthlyAvg: number;
 }
 
+// TODO this type is messed up
 interface BreakdownItem {
+  summary?: BreakdownItem;
   count: number;
   tokens: number;
   amount: number;
   formattedAmount: string;
 }
 
-interface Breakdown {
+interface BreakdownOptions {
+  ids: string[];
+  models: string[];
+  providers: string[];
+}
+
+export interface UsageBreakdown {
   [key: string]:
     | {
         [key: string]: BreakdownItem;
-        all: BreakdownItem;
+        summary: BreakdownItem;
       }
-    | BreakdownItem;
-  all: BreakdownItem;
+    | BreakdownItem
+    | BreakdownOptions;
+  summary: BreakdownItem;
+  options: BreakdownOptions;
 }
 
 interface TransformQuantity {
@@ -35,7 +45,7 @@ interface TransformQuantity {
   round: "up" | "down";
 }
 
-interface OpenAI {
+interface Rates {
   [model: string]:
     | {
         transform_quantity: TransformQuantity;
@@ -50,9 +60,9 @@ interface OpenAI {
 }
 
 interface Pricing {
-  [key: string]: string | OpenAI;
+  [key: string]: string | Rates;
   id: string;
-  openai: OpenAI;
+  openai: Rates;
   published: string;
 }
 
@@ -105,6 +115,8 @@ const PRICING: Pricing = {
   published: "2023-03-03T22:42:43.604Z"
 };
 
+const COUNTS = { count: 0, tokens: 0, amount: 0 };
+
 const formatAmounts = (obj: any) => {
   Object.keys(obj).forEach((key) => {
     const val = obj[key];
@@ -131,7 +143,8 @@ const applyPricing = ({
 }: {
   usage: TokenUsageSummary[];
   pricing: Pricing;
-  data: Breakdown;
+  // TODO: having an issue with the typings here
+  data: any;
 }) => {
   usage.forEach(({ apiKeyId: id, model, provider }) => {
     const rate = pricing?.[provider]?.[model];
@@ -151,51 +164,64 @@ const applyPricing = ({
 
     console.log(`\n${model} (${unitCount} * ${unitRate}) amount:`, amount);
 
-    data.all.amount += amount;
-    data[id].all.amount += amount;
+    data.summary.amount += amount;
+    data[id].summary.amount += amount;
     data[id][model].amount += amount;
+    data.models[model].amount += amount;
   });
 };
 
 const prepareBreakdown = (usage: TokenUsageSummary[]) => {
   const result = usage.reduce(
-    (memo, { apiKeyId: id, model, countTotal, tokenTotal }) => {
-      memo[id] ??= { all: { count: 0, tokens: 0, amount: 0 } };
-      memo[id][model] ??= { count: 0, tokens: 0, amount: 0 };
+    (memo, { apiKeyId: id, model, countTotal, tokenTotal, provider }) => {
+      if (!memo.options.ids.includes(id)) {
+        memo.options.ids.push(id);
+      }
+      if (!memo.options.models.includes(model)) {
+        memo.options.models.push(model);
+      }
+      if (!memo.options.providers.includes(provider)) {
+        memo.options.providers.push(provider);
+      }
+      memo[id] ??= { summary: cloneDeep(COUNTS) };
+      memo.models[model] ??= cloneDeep(COUNTS);
+      memo[id][model] ??= cloneDeep(COUNTS);
 
-      memo.all.count += countTotal;
-      memo.all.tokens += tokenTotal;
-      memo.all.amount += 0;
+      memo.summary.count += countTotal;
+      memo.summary.tokens += tokenTotal;
+      memo.summary.amount += 0;
 
-      memo[id].all.count += countTotal;
-      memo[id].all.tokens += tokenTotal;
-      memo[id].all.amount += 0;
+      memo[id].summary.count += countTotal;
+      memo[id].summary.tokens += tokenTotal;
+      memo[id].summary.amount += 0;
 
       memo[id][model].count += countTotal;
       memo[id][model].tokens += tokenTotal;
       memo[id][model].amount += 0;
 
+      memo.models[model].count += countTotal;
+      memo.models[model].tokens += tokenTotal;
+      memo.models[model].amount += 0;
+
       return memo;
     },
     {
-      all: {
+      summary: {
         count: 0,
         tokens: 0,
         amount: 0,
         formattedAmount: "$0.00"
+      },
+      models: {},
+      options: {
+        ids: [],
+        models: [],
+        providers: []
       }
     } as any
   );
 
-  return result as {
-    [key: string]:
-      | {
-          [key: string]: BreakdownItem;
-          all: BreakdownItem;
-        }
-      | BreakdownItem;
-    all: BreakdownItem;
-  };
+  return result as UsageBreakdown;
 };
 
 export const usageBreakdown = ({
