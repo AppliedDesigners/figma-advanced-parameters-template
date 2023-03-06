@@ -115,7 +115,7 @@ const PRICING: Pricing = {
   published: "2023-03-03T22:42:43.604Z"
 };
 
-const COUNTS = { count: 0, tokens: 0, amount: 0 };
+const COUNT_BUCKET = { count: 0, tokens: 0, amount: 0 };
 
 const formatAmounts = (obj: any) => {
   Object.keys(obj).forEach((key) => {
@@ -148,7 +148,7 @@ const applyPricing = ({
 }) => {
   usage.forEach(({ apiKeyId: id, model, provider }) => {
     const rate = pricing?.[provider]?.[model];
-    const modelTokens = data?.[id]?.[model]?.tokens;
+    const modelTokens = data?.apiKeys?.[id]?.models?.[model]?.tokens;
 
     if (!rate || !modelTokens) {
       console.warn(`No rate for provider:${provider} model:${model}`);
@@ -165,8 +165,8 @@ const applyPricing = ({
     console.log(`\n${model} (${unitCount} * ${unitRate}) amount:`, amount);
 
     data.summary.amount += amount;
-    data[id].summary.amount += amount;
-    data[id][model].amount += amount;
+    data.apiKeys[id].summary.amount += amount;
+    data.apiKeys[id].models[model].amount += amount;
     data.models[model].amount += amount;
   });
 };
@@ -174,8 +174,11 @@ const applyPricing = ({
 const prepareBreakdown = (usage: TokenUsageSummary[]) => {
   const result = usage.reduce(
     (memo, { apiKeyId: id, model, countTotal, tokenTotal, provider }) => {
-      if (!memo.options.ids.includes(id)) {
-        memo.options.ids.push(id);
+      /**
+       * Collect unique options
+       */
+      if (!memo.options.apiKeys.includes(id)) {
+        memo.options.apiKeys.push(id);
       }
       if (!memo.options.models.includes(model)) {
         memo.options.models.push(model);
@@ -183,22 +186,35 @@ const prepareBreakdown = (usage: TokenUsageSummary[]) => {
       if (!memo.options.providers.includes(provider)) {
         memo.options.providers.push(provider);
       }
-      memo[id] ??= { summary: cloneDeep(COUNTS) };
-      memo.models[model] ??= cloneDeep(COUNTS);
-      memo[id][model] ??= cloneDeep(COUNTS);
 
+      /**
+       * Initialize usage count buckets
+       */
+      memo.apiKeys[id] ??= { summary: cloneDeep(COUNT_BUCKET) };
+      memo.models[model] ??= cloneDeep(COUNT_BUCKET);
+      memo.apiKeys[id].models ??= {};
+      memo.apiKeys[id].models[model] ??= cloneDeep(COUNT_BUCKET);
+
+      /**
+       * Increments
+       * 1. All ApiKey summary
+       * 2. Per ApiKey summary
+       * 3. Per ApiKey model counts
+       * 4. Per model counts
+       */
+      // 1.
       memo.summary.count += countTotal;
       memo.summary.tokens += tokenTotal;
       memo.summary.amount += 0;
-
-      memo[id].summary.count += countTotal;
-      memo[id].summary.tokens += tokenTotal;
-      memo[id].summary.amount += 0;
-
-      memo[id][model].count += countTotal;
-      memo[id][model].tokens += tokenTotal;
-      memo[id][model].amount += 0;
-
+      // 2.
+      memo.apiKeys[id].summary.count += countTotal;
+      memo.apiKeys[id].summary.tokens += tokenTotal;
+      memo.apiKeys[id].summary.amount += 0;
+      // 3.
+      memo.apiKeys[id].models[model].count += countTotal;
+      memo.apiKeys[id].models[model].tokens += tokenTotal;
+      memo.apiKeys[id].models[model].amount += 0;
+      // 4.
       memo.models[model].count += countTotal;
       memo.models[model].tokens += tokenTotal;
       memo.models[model].amount += 0;
@@ -213,8 +229,9 @@ const prepareBreakdown = (usage: TokenUsageSummary[]) => {
         formattedAmount: "$0.00"
       },
       models: {},
+      apiKeys: {},
       options: {
-        ids: [],
+        apiKeys: [],
         models: [],
         providers: []
       }

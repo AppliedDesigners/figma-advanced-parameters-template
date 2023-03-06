@@ -84,48 +84,54 @@ describe("src/utils", () => {
           }
         },
         options: {
-          ids: ["apiKey1", "apiKey2"],
+          apiKeys: ["apiKey1", "apiKey2"],
           models: ["text-davinci-003", "text-curie-001"],
           providers: ["openai"]
         },
-        apiKey1: {
-          "summary": {
-            count: 6,
-            tokens: 300000,
-            amount: 240,
-            formattedAmount: "$2.40"
+        apiKeys: {
+          apiKey1: {
+            summary: {
+              count: 6,
+              tokens: 300000,
+              amount: 240,
+              formattedAmount: "$2.40"
+            },
+            models: {
+              "text-davinci-003": {
+                count: 2,
+                tokens: 100000,
+                amount: 200,
+                formattedAmount: "$2.00"
+              },
+              "text-curie-001": {
+                count: 4,
+                tokens: 200000,
+                amount: 40,
+                formattedAmount: "$0.40"
+              }
+            }
           },
-          "text-davinci-003": {
-            count: 2,
-            tokens: 100000,
-            amount: 200,
-            formattedAmount: "$2.00"
-          },
-          "text-curie-001": {
-            count: 4,
-            tokens: 200000,
-            amount: 40,
-            formattedAmount: "$0.40"
-          }
-        },
-        apiKey2: {
-          "summary": {
-            count: 4,
-            tokens: 200000,
-            amount: 310,
-            formattedAmount: "$3.10"
-          },
-          "text-davinci-003": {
-            count: 3,
-            tokens: 150000,
-            amount: 300,
-            formattedAmount: "$3.00"
-          },
-          "text-curie-001": {
-            count: 1,
-            tokens: 50000,
-            amount: 10,
-            formattedAmount: "$0.10"
+          apiKey2: {
+            summary: {
+              count: 4,
+              tokens: 200000,
+              amount: 310,
+              formattedAmount: "$3.10"
+            },
+            models: {
+              "text-davinci-003": {
+                count: 3,
+                tokens: 150000,
+                amount: 300,
+                formattedAmount: "$3.00"
+              },
+              "text-curie-001": {
+                count: 1,
+                tokens: 50000,
+                amount: 10,
+                formattedAmount: "$0.10"
+              }
+            }
           }
         }
       };
