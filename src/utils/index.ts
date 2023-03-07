@@ -1,5 +1,6 @@
 // @ts-nocheck
 import cloneDeep from "lodash/cloneDeep";
+import round from "lodash/round";
 
 export interface TokenUsageSummary {
   apiKeyId: string;
@@ -23,7 +24,7 @@ interface BreakdownItem {
 }
 
 interface BreakdownOptions {
-  ids: string[];
+  apiKeys: string[];
   models: string[];
   providers: string[];
 }
@@ -45,66 +46,147 @@ interface TransformQuantity {
   round: "up" | "down";
 }
 
-interface Rates {
+type Rate = {
+  transform_quantity: TransformQuantity;
+  unit_amount_decimal: string;
+};
+
+interface RateMap {
   [model: string]:
+    | Rate
     | {
-        transform_quantity: TransformQuantity;
-        unit_amount_decimal: string;
-      }
-    | {
-        [model: string]: {
-          transform_quantity: TransformQuantity;
-          unit_amount_decimal: string;
-        };
+        [model: string]: Rate;
       };
 }
 
 interface Pricing {
-  [key: string]: string | Rates;
+  [key: string]: string | RateMap;
   id: string;
-  openai: Rates;
+  openai: RateMap;
   published: string;
 }
+
+/**
+ * GPT rates are listed on the pricing page here:
+ * https://openai.com/pricing#faq-completions-pricing
+ *
+ * A list of all models can be fetched via the API
+ * https://api.openai.com/v1/models
+ *
+ * Documented GPT models are listed here
+ * - https://platform.openai.com/docs/models/gpt-3-5
+ * - https://platform.openai.com/docs/models/gpt-3
+ *
+ * Model name / purposes
+ * - https://community.openai.com/t/what-do-all-these-models-do/19007/2
+ */
+const UNIT_BASE = {
+  // per 1k tokens
+  TOKEN: 1000,
+  // per minute
+  MINUTE: 60
+};
+
+const PRECISION = 4;
+
+const RATES: {
+  [key: string]: Rate;
+} = {
+  DAVINCI: {
+    transform_quantity: {
+      divide_by: UNIT_BASE.TOKEN,
+      round: "up"
+    },
+    // $0.02
+    unit_amount_decimal: "2"
+  },
+  CURIE: {
+    transform_quantity: {
+      divide_by: UNIT_BASE.TOKEN,
+      round: "up"
+    },
+    // $0.002
+    unit_amount_decimal: "0.2"
+  },
+  BABBAGE: {
+    transform_quantity: {
+      divide_by: UNIT_BASE.TOKEN,
+      round: "up"
+    },
+    // $0.0005
+    unit_amount_decimal: "0.05"
+  },
+  ADA: {
+    transform_quantity: {
+      divide_by: UNIT_BASE.TOKEN,
+      round: "up"
+    },
+    // $0.0004
+    unit_amount_decimal: "0.04"
+  },
+  TRIAL: {
+    transform_quantity: {
+      divide_by: UNIT_BASE.TOKEN,
+      round: "up"
+    },
+    // $0.000
+    unit_amount_decimal: "0"
+  }
+};
 
 const PRICING: Pricing = {
   id: "3b41a695-3c09-49db-8d03-e37673c260f0",
   openai: {
-    "text-davinci-003": {
+    /**
+     * GPT
+     */
+    "gpt-3.5-turbo": {
       transform_quantity: {
-        divide_by: 1000,
-        round: "up"
-      },
-      // $0.02
-      unit_amount_decimal: "2"
-    },
-    "text-curie-001": {
-      transform_quantity: {
-        divide_by: 1000,
+        divide_by: UNIT_BASE.TOKEN,
         round: "up"
       },
       // $0.002
       unit_amount_decimal: "0.2"
     },
-    "text-babbage-001": {
+    // Davinci
+    "davinci": RATES.DAVINCI,
+    "text-davinci-003": RATES.DAVINCI,
+    "text-davinci-002": RATES.DAVINCI,
+    "text-davinci-001": RATES.DAVINCI,
+    // Curie
+    "curie": RATES.CURIE,
+    "text-curie-001": RATES.CURIE,
+    // Babbage
+    "babbage": RATES.BABBAGE,
+    "text-babbage-001": RATES.BABBAGE,
+    // Ada
+    "ada": RATES.ADA,
+    "text-ada-001": RATES.ADA,
+    /**
+     * Whisper
+     * - audio to text
+     */
+    "whisper-1": {
       transform_quantity: {
-        divide_by: 1000,
+        divide_by: UNIT_BASE.MINUTE,
         round: "up"
       },
-      // $0.0005
-      unit_amount_decimal: "0.05"
+      // $0.006
+      unit_amount_decimal: "0.6"
     },
-    "text-ada-001": {
-      transform_quantity: {
-        divide_by: 1000,
-        round: "up"
-      },
-      // $0.0004
-      unit_amount_decimal: "0.04"
-    },
+    /**
+     * Codex - Free in trial
+     * - generates code
+     */
+    "code-davinci-002": RATES.TRIAL,
+    "code-cushman-001": RATES.TRIAL,
+    /**
+     * Fine tuned
+     */
     "fineTuned": {
       ada: {
         transform_quantity: {
-          divide_by: 1000,
+          divide_by: UNIT_BASE.TOKEN,
           round: "up"
         },
         // $0.0016
@@ -115,7 +197,24 @@ const PRICING: Pricing = {
   published: "2023-03-03T22:42:43.604Z"
 };
 
-const COUNT_BUCKET = { count: 0, tokens: 0, amount: 0 };
+const COUNT_BUCKET = { calls: 0, tokens: 0, amount: 0 };
+
+export function formatTrailingZeros(currencyString) {
+  const regex = /0+$/;
+  let result = currencyString.replace(regex, "");
+
+  if (!result.includes(".")) {
+    result += ".";
+  }
+  const decimalDigits = result.split(".")[1];
+  if (decimalDigits.length === 1) {
+    return result + "0";
+  } else if (decimalDigits.length === 0) {
+    return result + "00";
+  }
+
+  return result;
+}
 
 const formatAmounts = (obj: any) => {
   Object.keys(obj).forEach((key) => {
@@ -125,15 +224,28 @@ const formatAmounts = (obj: any) => {
 
       if ("amount" in val) {
         if (val.amount) {
-          obj[key].formattedAmount = new Intl.NumberFormat("en", {
-            style: "currency",
-            currency: "usd"
-          }).format(val.amount / 100);
+          obj[key].formattedAmount = formatTrailingZeros(
+            new Intl.NumberFormat("en", {
+              style: "currency",
+              currency: "usd",
+              minimumFractionDigits: 4
+            }).format(val.amount / 100)
+          );
         }
       }
     }
   });
   return obj;
+};
+
+const rateAmount = ({ rate, count }: { rate: Rate; count: number }) => {
+  const {
+    transform_quantity: { divide_by },
+    unit_amount_decimal: unitRate
+  } = rate;
+  const unitCount = count / divide_by;
+
+  return round(parseFloat(unitRate) * unitCount, PRECISION);
 };
 
 const applyPricing = ({
@@ -155,14 +267,8 @@ const applyPricing = ({
       return;
     }
 
-    const {
-      transform_quantity: { divide_by },
-      unit_amount_decimal: unitRate
-    } = rate;
-    const unitCount = modelTokens / divide_by;
-    const amount = parseFloat(unitRate) * unitCount;
-
-    console.log(`\n${model} (${unitCount} * ${unitRate}) amount:`, amount);
+    const amount = rateAmount({ rate, count: modelTokens });
+    console.log(`\n${model} amount in cents:`, amount);
 
     data.summary.amount += amount;
     data.apiKeys[id].summary.amount += amount;
@@ -203,19 +309,19 @@ const prepareBreakdown = (usage: TokenUsageSummary[]) => {
        * 4. Per model counts
        */
       // 1.
-      memo.summary.count += countTotal;
+      memo.summary.calls += countTotal;
       memo.summary.tokens += tokenTotal;
       memo.summary.amount += 0;
       // 2.
-      memo.apiKeys[id].summary.count += countTotal;
+      memo.apiKeys[id].summary.calls += countTotal;
       memo.apiKeys[id].summary.tokens += tokenTotal;
       memo.apiKeys[id].summary.amount += 0;
       // 3.
-      memo.apiKeys[id].models[model].count += countTotal;
+      memo.apiKeys[id].models[model].calls += countTotal;
       memo.apiKeys[id].models[model].tokens += tokenTotal;
       memo.apiKeys[id].models[model].amount += 0;
       // 4.
-      memo.models[model].count += countTotal;
+      memo.models[model].calls += countTotal;
       memo.models[model].tokens += tokenTotal;
       memo.models[model].amount += 0;
 
@@ -223,13 +329,13 @@ const prepareBreakdown = (usage: TokenUsageSummary[]) => {
     },
     {
       summary: {
-        count: 0,
+        calls: 0,
         tokens: 0,
         amount: 0,
         formattedAmount: "$0.00"
       },
-      models: {},
       apiKeys: {},
+      models: {},
       options: {
         apiKeys: [],
         models: [],
