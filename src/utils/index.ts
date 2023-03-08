@@ -3,15 +3,14 @@ import cloneDeep from "lodash/cloneDeep";
 import round from "lodash/round";
 
 export interface TokenUsageSummary {
-  apiKeyId: string;
+  apiTokenId: string;
   model: string;
   provider: string;
-  countTotal: number;
-  countDailyAvg: number;
-  countMonthlyAvg: number;
+  unitType: string;
+  resolution: string;
+  callTotal: number;
   tokenTotal: number;
-  tokenDailyAvg: number;
-  tokenMonthlyAvg: number;
+  imageTotal: number;
 }
 
 // TODO this type is messed up
@@ -19,12 +18,13 @@ interface BreakdownItem {
   summary?: BreakdownItem;
   count: number;
   tokens: number;
+  images: number;
   amount: number;
   formattedAmount: string;
 }
 
 interface BreakdownOptions {
-  apiKeys: string[];
+  apiTokens: string[];
   models: string[];
   providers: string[];
 }
@@ -80,58 +80,60 @@ interface Pricing {
  * Model name / purposes
  * - https://community.openai.com/t/what-do-all-these-models-do/19007/2
  */
-const UNIT_BASE = {
+const UNIT_DIVISOR = {
   // per 1k tokens
   TOKEN: 1000,
+  // per image
+  IMAGE: 1,
   // per minute
   MINUTE: 60
 };
 
 const PRECISION = 4;
 
+const scaffoldRate = ({
+  divisor,
+  decimal
+}: {
+  divisor: string;
+  decimal: string;
+}) => ({
+  transform_quantity: {
+    divide_by: divisor,
+    round: "up"
+  },
+  // $0.018
+  unit_amount_decimal: decimal
+});
+
 const RATES: {
   [key: string]: Rate;
 } = {
-  DAVINCI: {
-    transform_quantity: {
-      divide_by: UNIT_BASE.TOKEN,
-      round: "up"
-    },
-    // $0.02
-    unit_amount_decimal: "2"
-  },
-  CURIE: {
-    transform_quantity: {
-      divide_by: UNIT_BASE.TOKEN,
-      round: "up"
-    },
-    // $0.002
-    unit_amount_decimal: "0.2"
-  },
-  BABBAGE: {
-    transform_quantity: {
-      divide_by: UNIT_BASE.TOKEN,
-      round: "up"
-    },
-    // $0.0005
-    unit_amount_decimal: "0.05"
-  },
-  ADA: {
-    transform_quantity: {
-      divide_by: UNIT_BASE.TOKEN,
-      round: "up"
-    },
-    // $0.0004
-    unit_amount_decimal: "0.04"
-  },
-  TRIAL: {
-    transform_quantity: {
-      divide_by: UNIT_BASE.TOKEN,
-      round: "up"
-    },
-    // $0.000
-    unit_amount_decimal: "0"
-  }
+  // $0.02
+  DAVINCI: scaffoldRate({
+    divisor: UNIT_DIVISOR.TOKEN,
+    decimal: "2"
+  }),
+  // $0.002
+  CURIE: scaffoldRate({
+    divisor: UNIT_DIVISOR.TOKEN,
+    decimal: "0.2"
+  }),
+  // $0.0005
+  BABBAGE: scaffoldRate({
+    divisor: UNIT_DIVISOR.TOKEN,
+    decimal: "0.05"
+  }),
+  // $0.0004
+  ADA: scaffoldRate({
+    divisor: UNIT_DIVISOR.TOKEN,
+    decimal: "0.04"
+  }),
+  // $0
+  TRIAL: scaffoldRate({
+    divisor: UNIT_DIVISOR.TOKEN,
+    decimal: "0"
+  })
 };
 
 const PRICING: Pricing = {
@@ -140,14 +142,10 @@ const PRICING: Pricing = {
     /**
      * GPT
      */
-    "gpt-3.5-turbo": {
-      transform_quantity: {
-        divide_by: UNIT_BASE.TOKEN,
-        round: "up"
-      },
-      // $0.002
-      unit_amount_decimal: "0.2"
-    },
+    "gpt-3.5-turbo": scaffoldRate({
+      divisor: UNIT_DIVISOR.TOKEN,
+      decimal: "0.2"
+    }),
     // Davinci
     "davinci": RATES.DAVINCI,
     "text-davinci-003": RATES.DAVINCI,
@@ -162,42 +160,86 @@ const PRICING: Pricing = {
     // Ada
     "ada": RATES.ADA,
     "text-ada-001": RATES.ADA,
-    /**
-     * Whisper
-     * - audio to text
-     */
-    "whisper-1": {
-      transform_quantity: {
-        divide_by: UNIT_BASE.MINUTE,
-        round: "up"
-      },
-      // $0.006
-      unit_amount_decimal: "0.6"
+    "dalle": {
+      resolution: {
+        "1024x1024": scaffoldRate({
+          divisor: UNIT_DIVISOR.IMAGE,
+          decimal: "2"
+        }),
+        "512x512": scaffoldRate({
+          divisor: UNIT_DIVISOR.IMAGE,
+          decimal: "1.8"
+        }),
+        "256x256": scaffoldRate({
+          divisor: UNIT_DIVISOR.IMAGE,
+          decimal: "1.6"
+        })
+      }
     },
-    /**
-     * Codex - Free in trial
-     * - generates code
-     */
+    // Whisper - audio to text
+    "whisper-1": scaffoldRate({
+      divisor: UNIT_DIVISOR.MINUTE,
+      decimal: "0.6"
+    }),
+    // Codex - generate code
     "code-davinci-002": RATES.TRIAL,
     "code-cushman-001": RATES.TRIAL,
-    /**
-     * Fine tuned
-     */
+    // Fine tuned
     "fineTuned": {
-      ada: {
-        transform_quantity: {
-          divide_by: UNIT_BASE.TOKEN,
-          round: "up"
-        },
-        // $0.0016
-        unit_amount_decimal: "0.016"
-      }
+      // $0.0016
+      ada: scaffoldRate({
+        divisor: UNIT_DIVISOR.MINUTE,
+        decimal: "0.016"
+      })
     }
   },
   published: "2023-03-03T22:42:43.604Z"
 };
 
-const COUNT_BUCKET = { calls: 0, tokens: 0, amount: 0 };
+const getModelRate = ({ pricing, provider, model, resolution }) => {
+  let rate = pricing?.[provider]?.[model];
+  const rateMessage = `No rate for provider:${provider} model:${model} resolution:${resolution}`;
+  if (!rate) {
+    console.warn(rateMessage);
+    return;
+  }
+
+  /**
+   * Dalle rates are discriminated by resolution
+   */
+  if (model === "dalle") {
+    rate = rate.resolution?.[resolution];
+
+    if (!rate) {
+      console.warn(rateMessage);
+      return;
+    }
+  }
+
+  return rate;
+};
+
+const getModelUnitCount = ({ data, id, model, unitType }) => {
+  const tokenData = data?.[id]?.models?.[model];
+  let unitCount;
+  switch (unitType) {
+    case "image":
+      unitCount = tokenData.images;
+      break;
+    case "token":
+      unitCount = tokenData.tokens;
+      break;
+    case "minute":
+      unitCount = tokenData.minutes;
+      break;
+    default:
+      break;
+  }
+
+  return unitCount || 0;
+};
+
+const COUNT_BUCKET = { calls: 0, tokens: 0, images: 0, amount: 0 };
 
 export function formatTrailingZeros(currencyString) {
   const regex = /0+$/;
@@ -217,7 +259,10 @@ export function formatTrailingZeros(currencyString) {
 }
 
 const formatAmounts = (obj: any) => {
-  Object.keys(obj).forEach((key) => {
+  const keys = Object.keys(obj);
+  for (let index = 0; index < keys.length; index++) {
+    const key = keys[index];
+
     const val = obj[key];
     if (val && typeof val === "object") {
       formatAmounts(val);
@@ -234,7 +279,8 @@ const formatAmounts = (obj: any) => {
         }
       }
     }
-  });
+  }
+
   return obj;
 };
 
@@ -258,33 +304,55 @@ const applyPricing = ({
   // TODO: having an issue with the typings here
   data: any;
 }) => {
-  usage.forEach(({ apiKeyId: id, model, provider }) => {
-    const rate = pricing?.[provider]?.[model];
-    const modelTokens = data?.apiKeys?.[id]?.models?.[model]?.tokens;
+  for (let index = 0; index < usage.length; index++) {
+    const {
+      apiTokenId: id,
+      model,
+      provider,
+      resolution,
+      unitType
+    } = usage[index];
+    const rate = getModelRate({
+      pricing,
+      provider,
+      model,
+      resolution
+    });
+    const unitCount = getModelUnitCount({
+      data: data?.apiTokens,
+      id,
+      model,
+      unitType
+    });
 
-    if (!rate || !modelTokens) {
-      console.warn(`No rate for provider:${provider} model:${model}`);
-      return;
+    if (!unitCount) {
+      console.warn(
+        `No count for usage provider:${provider} model:${model} resolution:${resolution}`
+      );
+      continue;
     }
 
-    const amount = rateAmount({ rate, count: modelTokens });
+    const amount = rateAmount({ rate, count: unitCount });
     console.log(`\n${model} amount in cents:`, amount);
 
     data.summary.amount += amount;
-    data.apiKeys[id].summary.amount += amount;
-    data.apiKeys[id].models[model].amount += amount;
+    data.apiTokens[id].summary.amount += amount;
+    data.apiTokens[id].models[model].amount += amount;
     data.models[model].amount += amount;
-  });
+  }
 };
 
 const prepareBreakdown = (usage: TokenUsageSummary[]) => {
   const result = usage.reduce(
-    (memo, { apiKeyId: id, model, countTotal, tokenTotal, provider }) => {
+    (
+      memo,
+      { apiTokenId: id, model, callTotal, imageTotal, tokenTotal, provider }
+    ) => {
       /**
        * Collect unique options
        */
-      if (!memo.options.apiKeys.includes(id)) {
-        memo.options.apiKeys.push(id);
+      if (!memo.options.apiTokens.includes(id)) {
+        memo.options.apiTokens.push(id);
       }
       if (!memo.options.models.includes(model)) {
         memo.options.models.push(model);
@@ -296,10 +364,10 @@ const prepareBreakdown = (usage: TokenUsageSummary[]) => {
       /**
        * Initialize usage count buckets
        */
-      memo.apiKeys[id] ??= { summary: cloneDeep(COUNT_BUCKET) };
+      memo.apiTokens[id] ??= { summary: cloneDeep(COUNT_BUCKET) };
       memo.models[model] ??= cloneDeep(COUNT_BUCKET);
-      memo.apiKeys[id].models ??= {};
-      memo.apiKeys[id].models[model] ??= cloneDeep(COUNT_BUCKET);
+      memo.apiTokens[id].models ??= {};
+      memo.apiTokens[id].models[model] ??= cloneDeep(COUNT_BUCKET);
 
       /**
        * Increments
@@ -309,35 +377,37 @@ const prepareBreakdown = (usage: TokenUsageSummary[]) => {
        * 4. Per model counts
        */
       // 1.
-      memo.summary.calls += countTotal;
+      memo.summary.calls += callTotal;
       memo.summary.tokens += tokenTotal;
+      memo.summary.images += imageTotal;
       memo.summary.amount += 0;
       // 2.
-      memo.apiKeys[id].summary.calls += countTotal;
-      memo.apiKeys[id].summary.tokens += tokenTotal;
-      memo.apiKeys[id].summary.amount += 0;
+      memo.apiTokens[id].summary.calls += callTotal;
+      memo.apiTokens[id].summary.tokens += tokenTotal;
+      memo.apiTokens[id].summary.images += imageTotal;
+      memo.apiTokens[id].summary.amount += 0;
       // 3.
-      memo.apiKeys[id].models[model].calls += countTotal;
-      memo.apiKeys[id].models[model].tokens += tokenTotal;
-      memo.apiKeys[id].models[model].amount += 0;
+      memo.apiTokens[id].models[model].calls += callTotal;
+      memo.apiTokens[id].models[model].tokens += tokenTotal;
+      memo.apiTokens[id].models[model].images += imageTotal;
+      memo.apiTokens[id].models[model].amount += 0;
       // 4.
-      memo.models[model].calls += countTotal;
+      memo.models[model].calls += callTotal;
       memo.models[model].tokens += tokenTotal;
+      memo.models[model].images += imageTotal;
       memo.models[model].amount += 0;
 
       return memo;
     },
     {
       summary: {
-        calls: 0,
-        tokens: 0,
-        amount: 0,
+        ...COUNT_BUCKET,
         formattedAmount: "$0.00"
       },
-      apiKeys: {},
+      apiTokens: {},
       models: {},
       options: {
-        apiKeys: [],
+        apiTokens: [],
         models: [],
         providers: []
       }
@@ -355,6 +425,21 @@ export const usageBreakdown = ({
   pricing?: any;
 }) => {
   const data = prepareBreakdown(usage);
+  applyPricing({ usage, pricing, data });
+  formatAmounts(data);
+
+  return data;
+};
+
+export const altUsageBreakdown = ({
+  usage,
+  pricing = PRICING
+}: {
+  usage: TokenUsageSummary[];
+  pricing?: any;
+}) => {
+  const data = prepareBreakdown(usage);
+
   applyPricing({ usage, pricing, data });
   formatAmounts(data);
 
