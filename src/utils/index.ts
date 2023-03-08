@@ -430,18 +430,3 @@ export const usageBreakdown = ({
 
   return data;
 };
-
-export const altUsageBreakdown = ({
-  usage,
-  pricing = PRICING
-}: {
-  usage: TokenUsageSummary[];
-  pricing?: any;
-}) => {
-  const data = prepareBreakdown(usage);
-
-  applyPricing({ usage, pricing, data });
-  formatAmounts(data);
-
-  return data;
-};

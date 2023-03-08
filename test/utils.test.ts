@@ -1,12 +1,7 @@
 // @ts-nocheck
 import * as chai from "chai";
 import { utilExample, usageBreakdown, formatTrailingZeros } from "@/utils";
-import {
-  utilExample,
-  usageBreakdown,
-  altUsageBreakdown,
-  formatTrailingZeros
-} from "@/utils";
+import { utilExample, usageBreakdown, formatTrailingZeros } from "@/utils";
 const { assert } = chai;
 
 describe("src/utils", () => {
@@ -40,9 +35,9 @@ describe("src/utils", () => {
     });
   });
 
-  describe.only("altUsageBreakdown", () => {
+  describe("usageBreakdown", () => {
     it("example test", () => {
-      const result = altUsageBreakdown({
+      const result = usageBreakdown({
         usage: [
           {
             apiTokenId: "apiToken1",
@@ -207,136 +202,6 @@ describe("src/utils", () => {
         options: {
           apiTokens: ["apiToken1", "apiToken2"],
           models: ["text-davinci-003", "text-curie-001", "dalle"],
-          providers: ["openai"]
-        }
-      };
-
-      // @ts-ignore
-      assert.deepEqual(result, target);
-    });
-  });
-
-  describe("usageBreakdown", () => {
-    it("example test", () => {
-      const result = usageBreakdown({
-        usage: [
-          {
-            apiTokenId: "apiToken1",
-            model: "text-davinci-003",
-            provider: "openai",
-            countTotal: 2,
-            countDailyAvg: 0,
-            countMonthlyAvg: 0,
-            tokenTotal: 100000,
-            tokenDailyAvg: 0,
-            tokenMonthlyAvg: 0
-          },
-          {
-            apiTokenId: "apiToken1",
-            model: "text-curie-001",
-            provider: "openai",
-            countTotal: 4,
-            countDailyAvg: 0,
-            countMonthlyAvg: 0,
-            tokenTotal: 200000,
-            tokenDailyAvg: 0,
-            tokenMonthlyAvg: 0
-          },
-          {
-            apiTokenId: "apiToken2",
-            model: "text-davinci-003",
-            provider: "openai",
-            countTotal: 3,
-            countDailyAvg: 0,
-            countMonthlyAvg: 0,
-            tokenTotal: 150000,
-            tokenDailyAvg: 0,
-            tokenMonthlyAvg: 0
-          },
-          {
-            apiTokenId: "apiToken2",
-            model: "text-curie-001",
-            provider: "openai",
-            countTotal: 1,
-            countDailyAvg: 0,
-            countMonthlyAvg: 0,
-            tokenTotal: 50000,
-            tokenDailyAvg: 0,
-            tokenMonthlyAvg: 0
-          }
-        ]
-      });
-
-      const target = {
-        summary: {
-          calls: 10,
-          tokens: 500000,
-          amount: 550,
-          formattedAmount: "$5.50"
-        },
-        apiTokens: {
-          apiToken1: {
-            summary: {
-              calls: 6,
-              tokens: 300000,
-              amount: 240,
-              formattedAmount: "$2.40"
-            },
-            models: {
-              "text-davinci-003": {
-                calls: 2,
-                tokens: 100000,
-                amount: 200,
-                formattedAmount: "$2.00"
-              },
-              "text-curie-001": {
-                calls: 4,
-                tokens: 200000,
-                amount: 40,
-                formattedAmount: "$0.40"
-              }
-            }
-          },
-          apiToken2: {
-            summary: {
-              calls: 4,
-              tokens: 200000,
-              amount: 310,
-              formattedAmount: "$3.10"
-            },
-            models: {
-              "text-davinci-003": {
-                calls: 3,
-                tokens: 150000,
-                amount: 300,
-                formattedAmount: "$3.00"
-              },
-              "text-curie-001": {
-                calls: 1,
-                tokens: 50000,
-                amount: 10,
-                formattedAmount: "$0.10"
-              }
-            }
-          }
-        },
-        models: {
-          "text-davinci-003": {
-            calls: 5,
-            tokens: 250000,
-            amount: 500,
-            formattedAmount: "$5.00"
-          },
-          "text-curie-001": {
-            calls: 5,
-            tokens: 250000,
-            amount: 50,
-            formattedAmount: "$0.50"
-          }
-        },
-        options: {
-          apiTokens: ["apiToken1", "apiToken2"],
-          models: ["text-davinci-003", "text-curie-001"],
           providers: ["openai"]
         }
       };
