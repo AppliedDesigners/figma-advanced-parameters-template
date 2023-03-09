@@ -2,19 +2,22 @@
 import cloneDeep from "lodash/cloneDeep";
 import round from "lodash/round";
 
+const PRECISION = 4;
+const COUNT_BUCKET = { calls: 0, tokens: 0, images: 0, amount: 0 };
+
 export interface TokenUsageSummary {
   apiTokenId: string;
+  unitType: string;
   model: string;
   provider: string;
-  unitType: string;
   resolution: string;
   callTotal: number;
   tokenTotal: number;
   imageTotal: number;
 }
 
-// TODO this type is messed up
-interface BreakdownItem {
+// TODO conditional type keys need refinement
+export interface BreakdownItem {
   summary?: BreakdownItem;
   count: number;
   tokens: number;
@@ -23,7 +26,7 @@ interface BreakdownItem {
   formattedAmount: string;
 }
 
-interface BreakdownOptions {
+export interface BreakdownOptions {
   apiTokens: string[];
   models: string[];
   providers: string[];
@@ -41,17 +44,17 @@ export interface UsageBreakdown {
   options: BreakdownOptions;
 }
 
-interface TransformQuantity {
+export interface TransformQuantity {
   divide_by: number;
   round: "up" | "down";
 }
 
-type Rate = {
+export type Rate = {
   transform_quantity: TransformQuantity;
   unit_amount_decimal: string;
 };
 
-interface RateMap {
+export interface ProviderRates {
   [model: string]:
     | Rate
     | {
@@ -59,91 +62,95 @@ interface RateMap {
       };
 }
 
-interface Pricing {
-  [key: string]: string | RateMap;
+export interface RatesTable {
+  [key: string]: string | ProviderRates;
   id: string;
-  openai: RateMap;
+  openai: ProviderRates;
   published: string;
 }
 
-/**
- * GPT rates are listed on the pricing page here:
- * https://openai.com/pricing#faq-completions-pricing
- *
- * A list of all models can be fetched via the API
- * https://api.openai.com/v1/models
- *
- * Documented GPT models are listed here
- * - https://platform.openai.com/docs/models/gpt-3-5
- * - https://platform.openai.com/docs/models/gpt-3
- *
- * Model name / purposes
- * - https://community.openai.com/t/what-do-all-these-models-do/19007/2
- */
-const UNIT_DIVISOR = {
-  // per 1k tokens
-  TOKEN: 1000,
-  // per image
-  IMAGE: 1,
-  // per minute
-  MINUTE: 60
+export const UNIT_TYPE = {
+  TOKEN: "token",
+  IMAGE: "image",
+  MINUTE: "minute"
 };
 
-const PRECISION = 4;
+export const USAGE_METRIC = {
+  CALLS: "calls",
+  TOKENS: "tokens",
+  IMAGES: "images",
+  FORMATTED_AMOUNT: "formattedAmount"
+};
 
+export const UNIT_TYPE_DIVISOR = {
+  // per 1k tokens
+  [UNIT_TYPE.TOKEN]: 1000,
+  // per image
+  [UNIT_TYPE.IMAGE]: 1,
+  // per minute
+  [UNIT_TYPE.MINUTE]: 60
+};
+
+export const MODEL_UNIT_TYPE_MAP = {
+  dalle: UNIT_TYPE.IMAGE
+};
+
+/**
+ * Rates align to Stripe definition for usage based pricing
+ */
 const scaffoldRate = ({
   divisor,
   decimal
 }: {
-  divisor: string;
+  divisor: number;
   decimal: string;
-}) => ({
-  transform_quantity: {
-    divide_by: divisor,
-    round: "up"
-  },
-  // $0.018
-  unit_amount_decimal: decimal
-});
+}) =>
+  ({
+    transform_quantity: {
+      divide_by: divisor,
+      round: "up"
+    },
+    unit_amount_decimal: decimal
+  } as Rate);
 
 const RATES: {
   [key: string]: Rate;
 } = {
   // $0.02
   DAVINCI: scaffoldRate({
-    divisor: UNIT_DIVISOR.TOKEN,
+    divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.TOKEN],
     decimal: "2"
   }),
   // $0.002
   CURIE: scaffoldRate({
-    divisor: UNIT_DIVISOR.TOKEN,
+    divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.TOKEN],
     decimal: "0.2"
   }),
   // $0.0005
   BABBAGE: scaffoldRate({
-    divisor: UNIT_DIVISOR.TOKEN,
+    divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.TOKEN],
     decimal: "0.05"
   }),
   // $0.0004
   ADA: scaffoldRate({
-    divisor: UNIT_DIVISOR.TOKEN,
+    divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.TOKEN],
     decimal: "0.04"
   }),
   // $0
   TRIAL: scaffoldRate({
-    divisor: UNIT_DIVISOR.TOKEN,
+    divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.TOKEN],
     decimal: "0"
   })
 };
 
-const PRICING: Pricing = {
+export const RATES_TABLE: any = {
   id: "3b41a695-3c09-49db-8d03-e37673c260f0",
   openai: {
     /**
      * GPT
      */
     "gpt-3.5-turbo": scaffoldRate({
-      divisor: UNIT_DIVISOR.TOKEN,
+      divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.TOKEN],
       decimal: "0.2"
     }),
     // Davinci
@@ -163,22 +170,22 @@ const PRICING: Pricing = {
     "dalle": {
       resolution: {
         "1024x1024": scaffoldRate({
-          divisor: UNIT_DIVISOR.IMAGE,
+          divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.IMAGE],
           decimal: "2"
         }),
         "512x512": scaffoldRate({
-          divisor: UNIT_DIVISOR.IMAGE,
+          divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.IMAGE],
           decimal: "1.8"
         }),
         "256x256": scaffoldRate({
-          divisor: UNIT_DIVISOR.IMAGE,
+          divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.IMAGE],
           decimal: "1.6"
         })
       }
     },
     // Whisper - audio to text
     "whisper-1": scaffoldRate({
-      divisor: UNIT_DIVISOR.MINUTE,
+      divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.MINUTE],
       decimal: "0.6"
     }),
     // Codex - generate code
@@ -188,7 +195,7 @@ const PRICING: Pricing = {
     "fineTuned": {
       // $0.0016
       ada: scaffoldRate({
-        divisor: UNIT_DIVISOR.MINUTE,
+        divisor: UNIT_TYPE_DIVISOR[UNIT_TYPE.TOKEN],
         decimal: "0.016"
       })
     }
@@ -196,8 +203,8 @@ const PRICING: Pricing = {
   published: "2023-03-03T22:42:43.604Z"
 };
 
-const getModelRate = ({ pricing, provider, model, resolution }) => {
-  let rate = pricing?.[provider]?.[model];
+const getModelRate = ({ rates, provider, model, resolution }) => {
+  let rate = rates?.[provider]?.[model];
   const rateMessage = `No rate for provider:${provider} model:${model} resolution:${resolution}`;
   if (!rate) {
     console.warn(rateMessage);
@@ -223,13 +230,13 @@ const getModelUnitCount = ({ data, id, model, unitType }) => {
   const tokenData = data?.[id]?.models?.[model];
   let unitCount;
   switch (unitType) {
-    case "image":
+    case UNIT_TYPE.IMAGE:
       unitCount = tokenData.images;
       break;
-    case "token":
+    case UNIT_TYPE.TOKEN:
       unitCount = tokenData.tokens;
       break;
-    case "minute":
+    case UNIT_TYPE.MINUTE:
       unitCount = tokenData.minutes;
       break;
     default:
@@ -238,8 +245,6 @@ const getModelUnitCount = ({ data, id, model, unitType }) => {
 
   return unitCount || 0;
 };
-
-const COUNT_BUCKET = { calls: 0, tokens: 0, images: 0, amount: 0 };
 
 export function formatTrailingZeros(currencyString) {
   const regex = /0+$/;
@@ -258,22 +263,25 @@ export function formatTrailingZeros(currencyString) {
   return result;
 }
 
-const formatAmounts = (obj: any) => {
-  const keys = Object.keys(obj);
+/**
+ * Recursively format all 'amount' keys in the object
+ */
+const formatAmounts = (breakdown: any) => {
+  const keys = Object.keys(breakdown);
   for (let index = 0; index < keys.length; index++) {
     const key = keys[index];
 
-    const val = obj[key];
+    const val = breakdown[key];
     if (val && typeof val === "object") {
       formatAmounts(val);
 
       if ("amount" in val) {
         if (val.amount) {
-          obj[key].formattedAmount = formatTrailingZeros(
+          breakdown[key].formattedAmount = formatTrailingZeros(
             new Intl.NumberFormat("en", {
               style: "currency",
               currency: "usd",
-              minimumFractionDigits: 4
+              minimumFractionDigits: PRECISION
             }).format(val.amount / 100)
           );
         }
@@ -281,7 +289,7 @@ const formatAmounts = (obj: any) => {
     }
   }
 
-  return obj;
+  return breakdown;
 };
 
 const rateAmount = ({ rate, count }: { rate: Rate; count: number }) => {
@@ -294,14 +302,14 @@ const rateAmount = ({ rate, count }: { rate: Rate; count: number }) => {
   return round(parseFloat(unitRate) * unitCount, PRECISION);
 };
 
-const applyPricing = ({
+const applyRatesPricing = ({
   usage,
-  pricing,
+  rates,
   data
 }: {
   usage: TokenUsageSummary[];
-  pricing: Pricing;
-  // TODO: having an issue with the typings here
+  rates: RatesTable;
+  // TODO: types need improvement here
   data: any;
 }) => {
   for (let index = 0; index < usage.length; index++) {
@@ -313,11 +321,12 @@ const applyPricing = ({
       unitType
     } = usage[index];
     const rate = getModelRate({
-      pricing,
+      rates,
       provider,
       model,
       resolution
     });
+
     const unitCount = getModelUnitCount({
       data: data?.apiTokens,
       id,
@@ -419,13 +428,14 @@ const prepareBreakdown = (usage: TokenUsageSummary[]) => {
 
 export const usageBreakdown = ({
   usage,
-  pricing = PRICING
+  rates = RATES_TABLE
 }: {
   usage: TokenUsageSummary[];
-  pricing?: any;
+  rates?: any;
 }) => {
   const data = prepareBreakdown(usage);
-  applyPricing({ usage, pricing, data });
+
+  applyRatesPricing({ usage, rates, data });
   formatAmounts(data);
 
   return data;
